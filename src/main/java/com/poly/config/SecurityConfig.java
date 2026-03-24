@@ -4,35 +4,40 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+
+import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.Authentication;
+
+import com.poly.service.DaoUserDetailsManager;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-	// LƯU Ý: Ở Bài 3, chúng ta đã xóa hàm @Bean UserDetailsService.
-	// Spring Security sẽ tự động tìm và sử dụng class DaoUserDetailsManager (có gắn @Service) để xác thực.
+	@Bean
+	public PasswordEncoder passwordEncoder() {
+		return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+	}
 
 	@Bean
-	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-		// Bỏ cấu hình mặc định CSRF và CORS
+	public SecurityFilterChain securityFilterChain(HttpSecurity http, DaoUserDetailsManager dao) throws Exception {
+
 		http.csrf(config -> config.disable()).cors(config -> config.disable());
-        
-		// Phân quyền truy xuất theo vai trò 
+
 		http.authorizeHttpRequests(config -> {
-			config.requestMatchers("/poly/url1").authenticated(); 
-			config.requestMatchers("/poly/url2").hasRole("USER");
-			config.requestMatchers("/poly/url3").hasRole("ADMIN");
-			config.requestMatchers("/poly/url4").hasAnyRole("USER", "ADMIN");
-			config.anyRequest().permitAll(); 
+			config.requestMatchers("/poly/**").authenticated();
+			config.anyRequest().permitAll();
 		});
 
-        // Cấu hình xử lý từ chối truy xuất (Access Denied)
-		http.exceptionHandling(config -> {
-			config.accessDeniedPage("/access-denied.html");
-		});
-
-		// Các cấu hình Form đăng nhập
 		http.formLogin(config -> {
 			config.loginPage("/login/form");
 			config.loginProcessingUrl("/login/check");
@@ -42,23 +47,44 @@ public class SecurityConfig {
 			config.usernameParameter("username");
 			config.passwordParameter("password");
 		});
-        
-		// Cấu hình Ghi nhớ tài khoản (Remember Me)
+
+		http.oauth2Login(config -> {
+			config.loginPage("/login/form");
+
+			config.successHandler((request, response, authentication) -> {
+
+				DefaultOAuth2User oauthUser = (DefaultOAuth2User) authentication.getPrincipal();
+
+				String email = oauthUser.getAttribute("email");
+
+				UserDetails user = User.withUsername(email).password(passwordEncoder().encode("noop")).roles("USER")
+						.build();
+
+				Authentication newAuth = new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
+
+				SecurityContextHolder.getContext().setAuthentication(newAuth);
+
+				response.sendRedirect("/");
+			});
+
+			config.failureUrl("/login/failure");
+		});
+
 		http.rememberMe(config -> {
-			config.tokenValiditySeconds(3 * 24 * 60 * 60); 
+			config.tokenValiditySeconds(3 * 24 * 60 * 60);
 			config.rememberMeCookieName("remember-me");
 			config.rememberMeParameter("remember-me");
+			config.userDetailsService(dao);
 		});
-        
-		// Cấu hình Đăng xuất (Logout)
+
 		http.logout(config -> {
 			config.logoutUrl("/logout");
 			config.logoutSuccessUrl("/login/exit");
 			config.clearAuthentication(true);
-			config.invalidateHttpSession(true);
+config.invalidateHttpSession(true);
 			config.deleteCookies("remember-me");
 		});
-        
+
 		return http.build();
 	}
 }

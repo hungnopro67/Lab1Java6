@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý Sinh Viên - CRUD REST API</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .form-group { margin-bottom: 10px; }
+        label { display: inline-block; width: 120px; }
+        input[type="text"] { width: 200px; padding: 3px; }
+        .actions { margin-top: 15px; margin-bottom: 20px; }
+        button { padding: 5px 10px; cursor: pointer; }
+        table { border-collapse: collapse; width: 600px; }
+        th, td { border: 1px solid #999; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; }
+        a { text-decoration: none; color: blue; cursor: pointer; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+    <h2>QUẢN LÝ SINH VIÊN</h2>
+
+    <div class="form-group">
+        <label>Id:</label>
+        <input type="text" id="studentId">
+    </div>
+    <div class="form-group">
+        <label>Full Name:</label>
+        <input type="text" id="fullName">
+    </div>
+    <div class="form-group">
+        <label>Average Mark:</label>
+        <input type="text" id="mark">
+    </div>
+    <div class="form-group">
+        <label>Gender:</label>
+        <input type="radio" name="gender" id="genderMale" value="true" checked> Male
+        <input type="radio" name="gender" id="genderFemale" value="false"> Female
+    </div>
+
+    <div class="actions">
+        <button onclick="createStudent()">Create</button>
+        <button onclick="updateStudent()">Update</button>
+        <button onclick="deleteFromForm()">Delete</button>
+        <button onclick="resetForm()">Reset</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Name</th>
+                <th>Mark</th>
+                <th>Gender</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+            </tbody>
+    </table>
+
+    <script>
+        // 1. CẤU HÌNH API
+        // *** HÃY THAY ĐỔI URL NÀY THÀNH URL FIREBASE CỦA BẠN ***
+        const host = "https://java6-fpoly-ae6dc-default-rtdb.firebaseio.com";
+        
+        // Biến lưu trữ Key của Firebase khi chọn 1 sinh viên để Update/Delete
+        let currentFirebaseKey = ""; 
+
+        // 2. KHỞI ĐẦU: Tải và hiển thị danh sách
+        function loadTableData() {
+            axios.get(`${host}/students.json`)
+                .then(resp => {
+                    const data = resp.data;
+                    const tbody = document.getElementById("tableBody");
+                    tbody.innerHTML = ""; // Xóa dữ liệu cũ trên bảng
+
+                    if (data) {
+                        // Duyệt qua từng key trong object trả về từ Firebase
+                        for (let key in data) {
+                            let student = data[key];
+                            let genderText = student.gender ? "Male" : "Female";
+                            
+                            // Tạo các thẻ tr, td tương ứng
+                            let row = `<tr>
+                                <td>${student.id}</td>
+                                <td>${student.name}</td>
+                                <td>${student.mark}</td>
+                                <td>${genderText}</td>
+                                <td>
+                                    <a onclick="editStudent('${key}')">Edit</a> | 
+                                    <a onclick="deleteStudent('${key}')">Delete</a>
+                                </td>
+                            </tr>`;
+                            tbody.innerHTML += row;
+                        }
+                    }
+                })
+                .catch(error => console.error("Lỗi khi tải dữ liệu:", error));
+        }
+
+        // 3. EDIT CLICK: Tải thông tin sinh viên lên Form
+        function editStudent(key) {
+            axios.get(`${host}/students/${key}.json`)
+                .then(resp => {
+                    let student = resp.data;
+                    // Đổ dữ liệu lên form
+                    document.getElementById("studentId").value = student.id;
+                    document.getElementById("fullName").value = student.name;
+                    document.getElementById("mark").value = student.mark;
+                    
+                    if (student.gender === true || student.gender === "true") {
+                        document.getElementById("genderMale").checked = true;
+                    } else {
+                        document.getElementById("genderFemale").checked = true;
+                    }
+
+                    // Lưu lại key để dùng cho Update và Delete
+                    currentFirebaseKey = key; 
+                })
+                .catch(error => console.error("Lỗi khi lấy thông tin:", error));
+        }
+
+        // 4. CREATE CLICK: Thêm mới
+        function createStudent() {
+            let studentData = getFormData();
+            axios.post(`${host}/students.json`, studentData)
+                .then(resp => {
+                    alert("Thêm mới thành công!");
+                    resetForm();
+                    loadTableData();
+                })
+                .catch(error => console.error("Lỗi khi thêm:", error));
+        }
+
+        // 5. UPDATE CLICK: Cập nhật
+        function updateStudent() {
+            if (!currentFirebaseKey) {
+                alert("Vui lòng chọn (Edit) một sinh viên từ bảng trước khi cập nhật!");
+                return;
+            }
+            let studentData = getFormData();
+            axios.put(`${host}/students/${currentFirebaseKey}.json`, studentData)
+                .then(resp => {
+                    alert("Cập nhật thành công!");
+                    loadTableData();
+                })
+                .catch(error => console.error("Lỗi khi cập nhật:", error));
+        }
+
+        // 6. DELETE CLICK (Từ nút trên Form hoặc nút trong Bảng)
+        function deleteStudent(key) {
+            if (confirm("Bạn có chắc chắn muốn xóa sinh viên này?")) {
+                axios.delete(`${host}/students/${key}.json`)
+                    .then(resp => {
+                        resetForm();
+                        loadTableData();
+                    })
+                    .catch(error => console.error("Lỗi khi xóa:", error));
+            }
+        }
+
+        // Nút Delete trên form
+        function deleteFromForm() {
+            if (!currentFirebaseKey) {
+                alert("Vui lòng chọn (Edit) một sinh viên từ bảng trước khi xóa!");
+                return;
+            }
+            deleteStudent(currentFirebaseKey);
+        }
+
+        // 7. CÁC HÀM HỖ TRỢ (Xóa trắng form, Lấy dữ liệu từ form)
+        function resetForm() {
+            document.getElementById("studentId").value = "";
+            document.getElementById("fullName").value = "";
+            document.getElementById("mark").value = "";
+            document.getElementById("genderMale").checked = true;
+            currentFirebaseKey = ""; // Xóa key hiện tại
+        }
+
+        function getFormData() {
+            return {
+                id: document.getElementById("studentId").value,
+                name: document.getElementById("fullName").value,
+                mark: parseFloat(document.getElementById("mark").value),
+                gender: document.getElementById("genderMale").checked
+            };
+        }
+
+        // Gọi hàm tải dữ liệu ngay khi trang web vừa mở lên (Khởi đầu)
+        loadTableData();
+
+    </script>
+</body>
+</html>
